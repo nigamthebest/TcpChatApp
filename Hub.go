@@ -6,23 +6,28 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"bufio"
 	"encoding/json"
 )
 
 type Client struct {
 	user_id int
-	Conn    net.Conn
+	reader  *bufio.Reader
+	writer  *bufio.Writer
 }
 
 type Message struct {
-	messageType string
-	senderId    int
-	receiverIds []int
-	messageBody string
+	MessageType string `json:"messageType"`
+	SenderId    int `json:"senderId"`
+	ReceiverIds []int `json:"receiverIds"`
+	MessageBody string `json:"messageBody"`
 }
 
-
 func main() {
+	startHub()
+}
+
+func startHub() {
 	fmt.Println("Launching server...")
 	// listen on all interfaces
 	ln, _ := net.Listen("tcp", ":8080")
@@ -33,52 +38,63 @@ func main() {
 		go handleClient(conn, clientsMap)
 	}
 }
-func handleClient(con net.Conn, clientMap map[int]Client) {
-	for {
-		// will listen for message to process ending in newline (\n)
-		decoder := json.NewDecoder(con)
-		// output message received
-		var message Message
-		if err := decoder.Decode(&message);
-		err != nil {
-			panic(err)
-		}
-		go handelMessage(con, message, clientMap)
-	}
-}
 
-func handelMessage(con net.Conn, message Message, clientsMap map[int]Client) {
-	fmt.Println("In  handelMessage for message", message)
-	switch  message.messageType{
-	case "ID":
-		go handelId(con, clientsMap)
-	case "LIST":
-		go handleList(con, clientsMap)
-	case "RELAY":
-		go handleRelay(con, message, clientsMap)
-	default:
-		fmt.Println("Unknown mesaage try 'ID' 'LIST'")
-	}
-}
 
-func handleRelay(con net.Conn, message Message, clientsMap map[int]Client) {
-}
-
-func handelId(con net.Conn, clientsMap map[int]Client) {
-	fmt.Println("Handeling ID message")
-	// send new ID back to client
+func handleClient(connection net.Conn, clientMap map[int]Client) {
+	fmt.Println("In  handleClient")
 	user_id := rand.Int()
-	newClient := Client{user_id, con}
+	writer := bufio.NewWriter(connection)
+	reader := bufio.NewReader(connection)
+	newClient := Client{user_id, reader, writer}
+	var clientsMap map[int]Client
 	clientsMap[user_id] = newClient
-	con.Write([]byte("your Id is " + strconv.Itoa(user_id) + "\n"))
+	for {
+		// Read message JSON
+		messageBytes, _ := reader.ReadBytes('\n');
+		//convert to JSON to obj
+		message := Message{}
+		error := json.Unmarshal(messageBytes, &message)
+		if (error != nil) {
+			fmt.Println("error in Unmarshal", error)
+		}
+
+		fmt.Println("message ", message)
+		switch  message.MessageType{
+		case "ID":
+			handelId(clientsMap)
+		case "LIST":
+			handleList(clientsMap)
+		case "RELAY":
+			handleRelay(message, clientsMap)
+		default:
+			fmt.Println("Unknown mesaage try 'ID' 'LIST'")
+		}
+	}
 }
 
-func handleList(con net.Conn, clientsMap map[int]Client) {
+func handleRelay(message Message, clientsMap map[int]Client) {
+	validateSenderId(message.SenderId, clientsMap)
+}
+func validateSenderId(user_id int, clientsMap map[int]Client) {
+
+}
+func (client *Client) Write(data string) {
+	client.writer.WriteString(data)
+	client.writer.Flush()
+}
+
+
+func handelId(client Client) {
+	fmt.Println("Handeling ID message")
+	client.writer.Write([]byte("your Id is " + strconv.Itoa(client.user_id) + "\n"))
+}
+
+func handleList(client Client, clientsMap map[int]Client) {
 	fmt.Println("Handeling LIST message")
-	usserIds := make([]string, 0, len(clientsMap))
+	userIds := make([]string, 0, len(clientsMap))
 	for k := range clientsMap {
-		usserIds = append(usserIds, strconv.Itoa(k))
+		userIds = k != client.user_id ?  append(userIds, strconv.Itoa(k))
 	}
 	// send new string back to client
-	con.Write([]byte("connectedIds are " + strings.Join(usserIds, ",") + "\n"))
+	connection.Write([]byte("connectedIds are " + strings.Join(userIds, ",") + "\n"))
 }

@@ -45,9 +45,9 @@ func handleClient(connection net.Conn, clientMap map[int]Client) {
 	user_id := rand.Int()
 	writer := bufio.NewWriter(connection)
 	reader := bufio.NewReader(connection)
-	newClient := Client{user_id, reader, writer}
-	var clientsMap map[int]Client
-	clientsMap[user_id] = newClient
+	client := Client{user_id, reader, writer}
+	var clientsMap map[int]Client = make(map[int]Client)
+	clientsMap[user_id] = client
 	for {
 		// Read message JSON
 		messageBytes, _ := reader.ReadBytes('\n');
@@ -61,18 +61,18 @@ func handleClient(connection net.Conn, clientMap map[int]Client) {
 		fmt.Println("message ", message)
 		switch  message.MessageType{
 		case "ID":
-			handelId(clientsMap)
+			handelId(client)
 		case "LIST":
-			handleList(clientsMap)
+			handleList(client, clientsMap)
 		case "RELAY":
-			handleRelay(message, clientsMap)
+			handleRelay(message, client, clientsMap)
 		default:
 			fmt.Println("Unknown mesaage try 'ID' 'LIST'")
 		}
 	}
 }
 
-func handleRelay(message Message, clientsMap map[int]Client) {
+func handleRelay(message Message, client Client, clientsMap map[int]Client) {
 	validateSenderId(message.SenderId, clientsMap)
 }
 func validateSenderId(user_id int, clientsMap map[int]Client) {
@@ -86,15 +86,15 @@ func (client *Client) Write(data string) {
 
 func handelId(client Client) {
 	fmt.Println("Handeling ID message")
-	client.writer.Write([]byte("your Id is " + strconv.Itoa(client.user_id) + "\n"))
+	client.Write("your Id is " + strconv.Itoa(client.user_id) + "\n")
 }
 
 func handleList(client Client, clientsMap map[int]Client) {
 	fmt.Println("Handeling LIST message")
 	userIds := make([]string, 0, len(clientsMap))
 	for k := range clientsMap {
-		userIds = k != client.user_id ?  append(userIds, strconv.Itoa(k))
+		userIds = append(userIds, strconv.Itoa(k))
 	}
 	// send new string back to client
-	connection.Write([]byte("connectedIds are " + strings.Join(userIds, ",") + "\n"))
+	client.Write("connectedIds are " + strings.Join(userIds, ",") + "\n")
 }

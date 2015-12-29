@@ -20,3 +20,7 @@ func startClient() {
 		fmt.Print("Message from server: "+message)
 	}
 }
+
+func main() {
+	startClient()
+}
